@@ -3,130 +3,149 @@ import csv
 from config import (
     PROJECT_DB_ID,
     EMPLOYEE_DB_ID,
+    MIGRATION_DB_ID
 )
 from parser import (
     load_csv_rows,
     load_indiv_csv,
-    load_tues_csv,
+    load_tues_csv
 )
-from relation_lookup import fetch_relation_lookup
+from notion_client import (
+    notion_patch
+)
+from relation_lookup import (
+    fetch_relation_lookup,
+    fetch_ready_imports,
+    mark_import_running
+)
 from updater import (
     build_properties,
-    create_page,
+    create_page
+)
+from sheet_exporter import (
+    export_google_sheet_as_csv,
+    save_csv_temp
 )
 
+# MAIN EXTRA - Scroll down more for actual main program
 
-# MAIN
+# importing the linked Google Sheets and turning it into a .csv
 
-def main():
+def run_import_job( job, project_lookup, employee_lookup, notion_patch_fn
+):
 
-    # "group" -> monday_checks - group.csv
-    # "ind" -> monday_checks - ind.csv
-    # "tues" -> monday_checks - tues.csv
-    IMPORT_TYPE = "tues"  # should be called group, ind, or tues depending on the csv file exported
+    page_id = job["page_id"]
+    import_type = job["import_type"]
+    sheet_url = job["google_sheets_link"]
 
-    print("Starting Monday Check Import...")
-
-    print("Loading relation lookups...")
-
-    project_lookup = fetch_relation_lookup(
-        PROJECT_DB_ID,
-        "Name"
-    )
-
-    employee_lookup = fetch_relation_lookup(
-        EMPLOYEE_DB_ID,
-        "Name"
-    )
-
-    print("Project lookup loaded.")
-    print("Employee lookup loaded.")
-
-    print(f"Import type selected: {IMPORT_TYPE}")
-
-    if IMPORT_TYPE == "group":
-        rows = load_csv_rows("csv_files/monday_checks - group.csv")
-
-    elif IMPORT_TYPE == "ind":
-        rows = load_indiv_csv("csv_files/monday_checks - ind.csv")
-    elif IMPORT_TYPE == "tues":
-        rows = load_tues_csv("csv_files/monday_checks - tues.csv")
-
-    else:
-        print(f"ERROR: Invalid IMPORT_TYPE -> {IMPORT_TYPE}")
-        return
-
-    print(f"Loaded {len(rows)} rows from CSV.")
+    print(f"\n=== STARTING JOB: {page_id} ({import_type}) ===")
 
     success = 0
     failed = 0
     skipped = 0
     error_log = []
 
-    for i, row in enumerate(rows, start=1):
-        try:
-            print(f"\nProcessing Row {i}...")
+    try:
+        # STEP 1: Export sheet → CSV
+        print("Downloading Google Sheet...")
+        csv_text = export_google_sheet_as_csv(sheet_url)
 
-            unique_key, properties = build_properties(
-                row,
-                project_lookup,
-                employee_lookup
-            )
+        csv_path = save_csv_temp(csv_text, f"{page_id}.csv")
 
-            if not properties:
-                skipped += 1
-                print(f"[{i}] SKIPPED -> No valid properties built")
-                continue
+        # STEP 2: Parse CSV
+        print("Parsing CSV...")
 
-            create_page(properties)
+        if import_type == "group":
+            rows = load_csv_rows(csv_path)
 
-            success += 1
-            print(
-                f"[{i}] SUCCESS -> Created: "
-                f"{row.get('Monday Check Name', 'Unknown')}"
-            )
+        elif import_type == "ind":
+            rows = load_indiv_csv(csv_path)
 
-        except Exception as e:
-            failed += 1
+        elif import_type == "tues":
+            rows = load_tues_csv(csv_path)
 
-            print(f"[{i}] FAILED -> {str(e)}")
+        else:
+            raise Exception(f"Unknown import type: {import_type}")
 
-            error_log.append({
-                "row_number": i,
-                "title": row.get("Monday Check Name", ""),
-                "error": str(e)
-            })
+        print(f"Loaded {len(rows)} rows.")
 
-    if error_log:
-        with open(
-            "logs/errors.csv",
-            "w",
-            newline="",
-            encoding="utf-8"
-        ) as file:
-            writer = csv.DictWriter(
-                file,
-                fieldnames=["row_number", "title", "error"]
-            )
+        # STEP 3: Process rows (NOW WITH FULL LOGGING)
+        for i, row in enumerate(rows, start=1):
+            try:
+                print(f"\nProcessing Row {i}...")
 
-            writer.writeheader()
-            writer.writerows(error_log)
+                _, props = build_properties(
+                    row,
+                    project_lookup,
+                    employee_lookup
+                )
 
-        print("\nError log written to logs/errors.csv")
+                if not props:
+                    skipped += 1
+                    print(f"[{i}] SKIPPED -> No properties built")
+                    continue
 
-    print("\n=====================================")
-    print("IMPORT COMPLETE")
-    print("=====================================")
-    print(f"Successful Imports: {success}")
-    print(f"Skipped Rows:       {skipped}")
-    print(f"Failed Rows:        {failed}")
-    print("=====================================")
+                create_page(props)
+
+                success += 1
+                print(f"[{i}] SUCCESS -> {row.get('Monday Check Name', 'Unknown')}")
+
+            except Exception as e:
+                failed += 1
+
+                print(f"[{i}] FAILED -> {str(e)}")
+
+                error_log.append({
+                    "row_number": i,
+                    "title": row.get("Monday Check Name", ""),
+                    "error": str(e)
+                })
+
+        # STEP 4: Write error log (same as old main)
+        if error_log:
+            with open("logs/errors.csv", "w", newline="", encoding="utf-8") as file:
+                writer = csv.DictWriter(
+                    file,
+                    fieldnames=["row_number", "title", "error"]
+                )
+                writer.writeheader()
+                writer.writerows(error_log)
+
+            print("\nError log written to logs/errors.csv")
+
+        notion_patch_fn(f"/pages/{page_id}", {
+            "properties": {
+                "Import Status": {
+                    "status": {
+                        "name": "Complete"
+                    }
+                },
+                "Last Error": {
+                    "rich_text": []
+                }
+            }
+        })
+
+        print("\nJOB COMPLETE")
+
+        print("\n=====================================")
+        print(f"Success: {success}")
+        print(f"Skipped: {skipped}")
+        print(f"Failed:  {failed}")
+        print("=====================================")
 
 
-if __name__ == "__main__":
-    main()
+    except Exception as e:
 
-# MAIN EXTRA
+        print(f"JOB FAILED: {str(e)}")
+
+        mark_import_failed(
+            page_id,
+            notion_patch_fn,
+            e
+        )
+
+# processing individual rows
 
 def process_row(row, project_lookup, employee_lookup):
     try:
@@ -145,3 +164,63 @@ def process_row(row, project_lookup, employee_lookup):
 
     except Exception as e:
         return "FAILED", str(e)
+
+# utility function for catching errors and avoiding crashes
+
+def mark_import_failed(page_id, notion_patch_fn, error_message):
+    try:
+        notion_patch_fn(f"/pages/{page_id}", {
+            "properties": {
+                "Import Status": {
+                    "status": {
+                        "name": "Failed"
+                    }
+                },
+                "Last Error": {
+                    "rich_text": [
+                        {
+                            "text": {
+                                "content": str(error_message)[:2000]
+                            }
+                        }
+                    ]
+                }
+            }
+        })
+
+        print(f"Marked {page_id} as FAILED")
+
+    except Exception as e:
+        print(f"CRITICAL: Could not update failure state -> {e}")
+
+# MAIN
+
+def main():
+    jobs = fetch_ready_imports(MIGRATION_DB_ID)
+
+    if not jobs:
+        print("No jobs found")
+        return
+
+    print("Loading relation lookups...")
+
+    project_lookup = fetch_relation_lookup(PROJECT_DB_ID, "Name")
+    employee_lookup = fetch_relation_lookup(EMPLOYEE_DB_ID, "Name")
+
+    from notion_client import notion_patch
+
+    print("Starting job execution...")
+
+    for job in jobs:
+        mark_import_running(job["page_id"])
+
+        run_import_job(
+            job,
+            project_lookup,
+            employee_lookup,
+            notion_patch
+        )
+
+
+if __name__ == "__main__":
+    main()

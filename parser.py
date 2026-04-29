@@ -10,8 +10,14 @@ def load_csv_rows(path):
     with open(path, newline="", encoding="utf-8-sig") as file:
         reader = csv.DictReader(file)
 
+        # normalize fieldnames (IMPORTANT FIX)
+        reader.fieldnames = [clean_header(f) for f in reader.fieldnames]
+
         for row in reader:
-            rows.append(row)
+            cleaned_row = {
+                clean_header(k): v for k, v in row.items()
+            }
+            rows.append(cleaned_row)
 
     return rows
 
@@ -26,6 +32,7 @@ def load_indiv_csv(path):
 
     with open(path, newline="", encoding="utf-8-sig") as file:
         reader = csv.reader(file)
+
         next(reader, None)
 
         project_row = next(reader, None)
@@ -33,6 +40,8 @@ def load_indiv_csv(path):
         if not project_row:
             print("ERROR: CSV missing project row (Row 2)")
             return rows
+
+        project_row = [clean_header(x) for x in project_row]
 
         while len(project_row) < 9:
             project_row.append("")
@@ -44,6 +53,8 @@ def load_indiv_csv(path):
         print(f"Table 2 Project: {table2_project}")
 
         for row_number, row in enumerate(reader, start=3):
+
+            row = [clean_header(x) for x in row]
 
             while len(row) < 9:
                 row.append("")
@@ -100,7 +111,6 @@ def load_tues_csv(path):
     with open(path, newline="", encoding="utf-8-sig") as file:
         reader = csv.reader(file)
 
-        # ignore row 1
         next(reader, None)
 
         header_row = next(reader, None)
@@ -108,6 +118,8 @@ def load_tues_csv(path):
         if not header_row:
             print("ERROR: CSV missing header row (Row 2)")
             return rows
+
+        header_row = [clean_header(x) for x in header_row]
 
         while len(header_row) < 2:
             header_row.append("")
@@ -128,12 +140,13 @@ def load_tues_csv(path):
 
         for row_number, row in enumerate(reader, start=3):
 
+            row = [clean_header(x) for x in row]
+
             while len(row) < len(header_row):
                 row.append("")
 
             project_name = normalize_text(row[0])
 
-            # blank project row = stop
             if not project_name:
                 print(f"Stopped at row {row_number} (blank project)")
                 break
@@ -142,11 +155,9 @@ def load_tues_csv(path):
                 title = titles[col - 1]
                 status = normalize_status(row[col])
 
-                # blank status = skip
                 if not status:
                     continue
 
-                # blank title = skip defensive safety
                 if not title:
                     continue
 
@@ -161,3 +172,10 @@ def load_tues_csv(path):
 
     print(f"Loaded {len(rows)} total rows from Tuesday CSV.")
     return rows
+
+# White space and weird row breaks fix
+
+def clean_header(value):
+    if value is None:
+        return ""
+    return str(value).replace("\r", "").strip()

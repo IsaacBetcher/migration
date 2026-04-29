@@ -31,7 +31,7 @@ def build_properties(row, project_lookup, employee_lookup):
     unique_key = f"{title}::{project_id}"
 
     properties = {
-        "Title": {
+        "Name": {
             "title": [{
                 "text": {
                     "content": title
@@ -43,21 +43,19 @@ def build_properties(row, project_lookup, employee_lookup):
                 "id": project_id
             }]
         },
-        "Check": {
-            "select": {
-                "name": check_type
-            } if check_type else None
-        },
+        "Check Type": {
+            "select": {"name": check_type}
+        } if check_type else None,
+
         "Employee Dashboards": {
             "relation": [{
                 "id": employee_id
             }] if employee_id else []
         },
         "Status": {
-            "select": {
-                "name": status
-            } if status else None
-        },
+            "select": {"name": status}
+        } if status else None,
+
         "Comment": {
             "rich_text": [{
                 "text": {
@@ -66,10 +64,9 @@ def build_properties(row, project_lookup, employee_lookup):
             }] if comment else []
         },
         "Reviewed": {
-            "select": {
-                "name": reviewed
-            } if reviewed else None
-        },
+            "select": {"name": reviewed}
+        } if reviewed else None,
+
         "Migrated": {
             "checkbox": True
         }
@@ -85,13 +82,14 @@ def build_properties(row, project_lookup, employee_lookup):
 
 def create_page(properties):
     payload = {
-        "parent": {
-            "database_id": MONDAY_CHECK_DB_ID
-        },
+        "parent": {"database_id": MONDAY_CHECK_DB_ID},
         "properties": properties
     }
+    result = notion_post("/pages", payload)
 
-    notion_post("/pages", payload)
+    if not result:
+        raise Exception("Notion API returned no response — page creation failed")
+
     print("Created new Monday Check")
 
 

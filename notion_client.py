@@ -3,9 +3,7 @@ import requests
 
 from config import BASE_URL, HEADERS
 
-# =====================================================
-# NOTION HELPERS
-# =====================================================
+# NOTION HELPERS [UTILIZING REQUESTS LIBRARY]
 
 def notion_post(endpoint, payload, retries=3):
     for attempt in range(retries):
