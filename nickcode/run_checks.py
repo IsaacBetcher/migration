@@ -201,7 +201,7 @@ payload = {
 
 # ✅ Now just COPY from template
 
-"Employee Dashboards": props["Employee Dashboards"],
+"Employee Dashboards": props["Employee dashboards"],
 
 "Status": props["Status"],
 
