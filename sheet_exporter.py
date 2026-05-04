@@ -5,12 +5,23 @@ import os
 # that new format will be turned into Monday Check entries
 
 def export_google_sheet_as_csv(sheet_url):
+    import requests
 
-    # Convert normal URL → CSV export URL
-    if "/edit" in sheet_url:
-        csv_url = sheet_url.split("/edit")[0] + "/export?format=csv"
+    base_url = sheet_url.split("/edit")[0]
+
+    # gid identifies which tab of the sheet we grab from
+    # this is ugly but necessary
+
+    gid = None
+    if "gid=" in sheet_url:
+        gid = sheet_url.split("gid=")[-1].split("&")[0]
+
+    if gid:
+        csv_url = f"{base_url}/export?format=csv&gid={gid}"
     else:
-        csv_url = sheet_url + "/export?format=csv"
+        csv_url = f"{base_url}/export?format=csv"
+
+    print(f"Exporting CSV from: {csv_url}")
 
     response = requests.get(csv_url)
 

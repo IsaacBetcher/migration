@@ -33,11 +33,31 @@ def load_indiv_csv(path):
     with open(path, newline="", encoding="utf-8-sig") as file:
         reader = csv.reader(file)
 
-        next(reader, None)
+        # STEP 1: Clean all rows
+        raw_rows = [
+            [clean_header(x) for x in row]
+            for row in reader
+        ]
 
-        project_row = next(reader, None)
+        # STEP 2: Filter meaningful rows only
+        filtered_rows = [
+            row for row in raw_rows
+            if is_meaningful_row(row)
+        ]
 
-        if not project_row:
+        # DEBUG (keep temporarily)
+        for i in range(min(5, len(filtered_rows))):
+            print(f"Filtered Row {i + 1}: {filtered_rows[i]}")
+
+        # can be removed but like probably don't it's a nice easy debug
+
+        if len(filtered_rows) < 2:
+            print("ERROR: Not enough meaningful rows")
+            return rows
+
+        project_row = filtered_rows[1]
+
+        if not project_row or all(not clean_header(x) for x in project_row):
             print("ERROR: CSV missing project row (Row 2)")
             return rows
 
@@ -52,7 +72,7 @@ def load_indiv_csv(path):
         print(f"Table 1 Project: {table1_project}")
         print(f"Table 2 Project: {table2_project}")
 
-        for row_number, row in enumerate(reader, start=3):
+        for row_number, row in enumerate(filtered_rows[2:], start=3):
 
             row = [clean_header(x) for x in row]
 
@@ -111,15 +131,28 @@ def load_tues_csv(path):
     with open(path, newline="", encoding="utf-8-sig") as file:
         reader = csv.reader(file)
 
-        next(reader, None)
+        # STEP 1: Clean all rows
+        raw_rows = [
+            [clean_header(x) for x in row]
+            for row in reader
+        ]
 
-        header_row = next(reader, None)
+        # STEP 2: Filter meaningful rows
+        filtered_rows = [
+            row for row in raw_rows
+            if any(clean_header(cell) for cell in row)
+        ]
 
-        if not header_row:
-            print("ERROR: CSV missing header row (Row 2)")
+        # DEBUG (keep temporarily)
+        for i in range(min(5, len(filtered_rows))):
+            print(f"Filtered Row {i + 1}: {filtered_rows[i]}")
+
+        # STEP 3: Validate structure
+        if len(filtered_rows) < 2:
+            print("ERROR: Not enough meaningful rows")
             return rows
 
-        header_row = [clean_header(x) for x in header_row]
+        header_row = filtered_rows[1]
 
         while len(header_row) < 2:
             header_row.append("")
@@ -130,23 +163,23 @@ def load_tues_csv(path):
             print("ERROR: Missing employee name in Row 2 Column A")
             return rows
 
+        # STEP 4: Extract titles
         titles = []
-
         for col in range(1, len(header_row)):
             titles.append(normalize_text(header_row[col]))
 
         print(f"Employee: {employee_name}")
         print(f"Found {len(titles)} title columns")
 
-        for row_number, row in enumerate(reader, start=3):
-
-            row = [clean_header(x) for x in row]
+        # STEP 5: Process data rows
+        for row_number, row in enumerate(filtered_rows[2:], start=3):
 
             while len(row) < len(header_row):
                 row.append("")
 
             project_name = normalize_text(row[0])
 
+            # blank project row = stop
             if not project_name:
                 print(f"Stopped at row {row_number} (blank project)")
                 break
@@ -179,3 +212,6 @@ def clean_header(value):
     if value is None:
         return ""
     return str(value).replace("\r", "").strip()
+
+def is_meaningful_row(row):
+    return any(clean_header(cell) for cell in row)

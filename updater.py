@@ -47,7 +47,7 @@ def build_properties(row, project_lookup, employee_lookup):
             "select": {"name": check_type}
         } if check_type else None,
 
-        "Employee Dashboards": {
+        "Employee dashboards": {
             "relation": [{
                 "id": employee_id
             }] if employee_id else []
