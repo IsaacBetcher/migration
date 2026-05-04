@@ -79,7 +79,7 @@ payload = {
 
 },
 
-"Employee Dashboards": {
+"Employee dashboards": {
 
 "relation": employee_dashboards
 
