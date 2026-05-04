@@ -189,7 +189,7 @@ return
 
 props = project.get("properties", {})
 
-employee_dashboards = props.get("Employee Dashboards", {}).get("relation", [])
+employee_dashboards = props.get("Employee dashboards", {}).get("relation", [])
 
 
 work_points_by_type = get_work_points_by_type(project)
